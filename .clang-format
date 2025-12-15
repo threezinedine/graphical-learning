@@ -1,0 +1,40 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Always
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: false
+AllowShortLoopsOnASingleLine: true
+
+AlignConsecutiveAssignments:
+    Enabled: true
+    AcrossComments: true
+
+AlignConsecutiveDeclarations: true
+AlignAfterOpenBracket: Align
+
+KeepEmptyLinesAtTheStartOfBlocks: false
+PointerAlignment: Left
+
+AlignArrayOfStructures: Left
+AlignConsecutiveMacros:
+    Enabled: true
+    AcrossComments: true
+
+AlignOperands: true
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterEnum: true
+    AfterStruct: true
+    AfterClass: true
+    AfterFunction: true
+    AfterControlStatement: true
+    BeforeElse: true
+
+BinPackArguments: false
+BinPackParameters: false
+AllowShortBlocksOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: true
