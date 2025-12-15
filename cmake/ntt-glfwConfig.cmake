@@ -1,6 +1,6 @@
-set(SET_LIBRARY_NAME ntt-glfw)
+set(LIB_NAME ntt-glfw)
 
-if (TARGET ${SET_LIBRARY_NAME})
+if (TARGET ${LIB_NAME})
     return()
 endif()
 
@@ -31,12 +31,12 @@ if (NOT TARGET OpenGL::GL)
 endif()
 
 add_library(
-    ${SET_LIBRARY_NAME} 
+    ${LIB_NAME} 
     INTERFACE
 )
 
 target_link_libraries(
-    ${SET_LIBRARY_NAME} 
+    ${LIB_NAME} 
     INTERFACE
     glfw
     glad

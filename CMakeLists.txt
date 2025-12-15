@@ -30,9 +30,17 @@ add_executable(
 )
 
 ntt_find_package(ntt-glfw)
+ntt_find_package(ntt-stb)
 
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     ntt-glfw
+    ntt-stb
+)
+
+target_compile_definitions(
+    ${PROJECT_NAME}
+    PRIVATE
+    SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
 )

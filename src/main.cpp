@@ -5,6 +5,9 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 int main()
 {
 	ASSERT(glfwInit() == GLFW_TRUE);
@@ -14,6 +17,15 @@ int main()
 
 	glfwMakeContextCurrent(window);
 	ASSERT(gladLoadGLLoader((GLADloadproc)glfwGetProcAddress));
+
+	int			   width, height, channels;
+	unsigned char* data =
+		stbi_load(STRINGIFY(SOURCE_DIR) "/assets/images/meed-logo.png", &width, &height, &channels, 0);
+	ASSERT(data != nullptr);
+
+	printf("Loaded image with width: %d, height: %d, channels: %d\n", width, height, channels);
+
+	stbi_image_free(data);
 
 	while (!glfwWindowShouldClose(window))
 	{
