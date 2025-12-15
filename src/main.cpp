@@ -5,14 +5,30 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
 #include <easy/profiler.h>
 #include <fstream>
 #include <string>
 
-std::string readFile(const std::string& filepath);
+#include "pipeline.h"
+#include "shader.h"
+#include "texture.h"
+#include "vertex_buffer.h"
+
+using namespace ntt;
+
+struct Vertex
+{
+	vec2 position;
+	vec3 color;
+};
+
+// clang-format off
+const Vertex vertices[] = {
+	{{ 0.0f,  0.5f}, {1.0f, 0.0f, 0.0f}}, // Top vertex (Red)
+	{{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, // Bottom-left vertex (Green)
+	{{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},  // Bottom-right vertex (Blue)
+};
+// clang-format on
 
 int main()
 {
@@ -27,95 +43,39 @@ int main()
 	glfwMakeContextCurrent(window);
 	ASSERT(gladLoadGLLoader((GLADloadproc)glfwGetProcAddress));
 
-	int			   width, height, channels;
-	unsigned char* data =
-		stbi_load(STRINGIFY(SOURCE_DIR) "/assets/images/meed-logo.png", &width, &height, &channels, 0);
-	ASSERT(data != nullptr);
+	Texture texture(STRINGIFY(SOURCE_DIR) "/assets/images/meed-logo.png");
 
-	printf("Loaded image with width: %d, height: %d, channels: %d\n", width, height, channels);
+	Shader vertexShader(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.vert", VERTEX_SHADER);
+	Shader fragmentShader(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.frag", FRAGMENT_SHADER);
 
-	stbi_image_free(data);
+	Shader shaders[2] = {std::move(vertexShader), std::move(fragmentShader)};
 
-	std::string vertexShaderSource = readFile(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.vert");
-	ASSERT(!vertexShaderSource.empty());
-	GLuint		vertexShader	 = glCreateShader(GL_VERTEX_SHADER);
-	const char* vertexSourceCStr = vertexShaderSource.c_str();
-	GL_ASSERT(glShaderSource(vertexShader, 1, &vertexSourceCStr, nullptr));
-	GL_ASSERT(glCompileShader(vertexShader));
+	Pipeline	 pipeline(shaders, 2);
+	VertexBuffer buffer({VertexAttributeType::VEC2, VertexAttributeType::VEC3});
 
-	bool success;
-	GL_ASSERT(glGetShaderiv(vertexShader, GL_COMPILE_STATUS, (int*)&success));
-	if (!success)
-	{
-		char infoLog[512];
-		GL_ASSERT(glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog));
-		fprintf(stderr, "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n%s", infoLog);
-		ASSERT(false);
-	}
-
-	std::string fragmentShaderSource = readFile(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.frag");
-	ASSERT(!fragmentShaderSource.empty());
-	GLuint		fragmentShader	   = glCreateShader(GL_FRAGMENT_SHADER);
-	const char* fragmentSourceCStr = fragmentShaderSource.c_str();
-	GL_ASSERT(glShaderSource(fragmentShader, 1, &fragmentSourceCStr, nullptr));
-	GL_ASSERT(glCompileShader(fragmentShader));
-
-	GL_ASSERT(glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, (int*)&success));
-	if (!success)
-	{
-		char infoLog[512];
-		GL_ASSERT(glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog));
-		fprintf(stderr, "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s", infoLog);
-		ASSERT(false);
-	}
-
-	GLuint shaderProgram = glCreateProgram();
-	GL_ASSERT(glAttachShader(shaderProgram, vertexShader));
-	GL_ASSERT(glAttachShader(shaderProgram, fragmentShader));
-	GL_ASSERT(glLinkProgram(shaderProgram));
-
-	GL_ASSERT(glGetProgramiv(shaderProgram, GL_LINK_STATUS, (int*)&success));
-	if (!success)
-	{
-		char infoLog[512];
-		GL_ASSERT(glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog));
-		fprintf(stderr, "ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s", infoLog);
-		ASSERT(false);
-	}
-
-	GL_ASSERT(glDeleteShader(vertexShader));
-	GL_ASSERT(glDeleteShader(fragmentShader));
+	buffer.update(vertices, sizeof(vertices));
 
 	while (!glfwWindowShouldClose(window))
 	{
 		EASY_BLOCK("Main Loop");
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		GL_ASSERT(glUseProgram(shaderProgram));
+		buffer.bind();
+		pipeline.bind();
 		GL_ASSERT(glDrawArrays(GL_TRIANGLES, 0, 3));
+		pipeline.unbind();
+		buffer.unbind();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
+	buffer.~VertexBuffer();
+	pipeline.~Pipeline();
+	texture.~Texture();
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	profiler::dumpBlocksToFile(STRINGIFY(SOURCE_DIR) "/logs/log.prof");
 	return 0;
-}
-
-std::string readFile(const std::string& filepath)
-{
-	std::ifstream fileStream(filepath, std::ios::in);
-	ASSERT(fileStream.is_open());
-
-	std::string content;
-	std::string line;
-	while (std::getline(fileStream, line))
-	{
-		content += line + "\n";
-	}
-
-	fileStream.close();
-	return content;
 }

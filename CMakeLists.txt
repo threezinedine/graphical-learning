@@ -32,6 +32,7 @@ add_executable(
 ntt_find_package(ntt-glfw)
 ntt_find_package(ntt-stb)
 ntt_find_package(ntt-profiler)
+ntt_find_package(ntt-glm)
 
 target_link_libraries(
     ${PROJECT_NAME}
@@ -39,6 +40,7 @@ target_link_libraries(
     ntt-glfw
     ntt-stb
     ntt-profiler
+    ntt-glm
 )
 
 target_compile_definitions(
