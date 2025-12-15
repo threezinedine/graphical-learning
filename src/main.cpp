@@ -8,8 +8,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include <easy/profiler.h>
+
 int main()
 {
+	EASY_PROFILER_ENABLE;
+	profiler::startListen();
+
 	ASSERT(glfwInit() == GLFW_TRUE);
 
 	GLFWwindow* window = glfwCreateWindow(800, 600, "GLFW Window", nullptr, nullptr);
@@ -29,6 +34,7 @@ int main()
 
 	while (!glfwWindowShouldClose(window))
 	{
+		EASY_BLOCK("Main Loop");
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glfwSwapBuffers(window);
@@ -37,5 +43,6 @@ int main()
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
+	profiler::dumpBlocksToFile(STRINGIFY(SOURCE_DIR) "/logs/log.prof");
 	return 0;
 }

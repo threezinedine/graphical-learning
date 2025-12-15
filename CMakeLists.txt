@@ -31,12 +31,14 @@ add_executable(
 
 ntt_find_package(ntt-glfw)
 ntt_find_package(ntt-stb)
+ntt_find_package(ntt-profiler)
 
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     ntt-glfw
     ntt-stb
+    ntt-profiler
 )
 
 target_compile_definitions(
