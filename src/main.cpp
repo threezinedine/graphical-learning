@@ -9,6 +9,10 @@
 #include <stb_image.h>
 
 #include <easy/profiler.h>
+#include <fstream>
+#include <string>
+
+std::string readFile(const std::string& filepath);
 
 int main()
 {
@@ -32,10 +36,63 @@ int main()
 
 	stbi_image_free(data);
 
+	std::string vertexShaderSource = readFile(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.vert");
+	ASSERT(!vertexShaderSource.empty());
+	GLuint		vertexShader	 = glCreateShader(GL_VERTEX_SHADER);
+	const char* vertexSourceCStr = vertexShaderSource.c_str();
+	GL_ASSERT(glShaderSource(vertexShader, 1, &vertexSourceCStr, nullptr));
+	GL_ASSERT(glCompileShader(vertexShader));
+
+	bool success;
+	GL_ASSERT(glGetShaderiv(vertexShader, GL_COMPILE_STATUS, (int*)&success));
+	if (!success)
+	{
+		char infoLog[512];
+		GL_ASSERT(glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog));
+		fprintf(stderr, "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n%s", infoLog);
+		ASSERT(false);
+	}
+
+	std::string fragmentShaderSource = readFile(STRINGIFY(SOURCE_DIR) "/assets/shaders/opengl/simple.frag");
+	ASSERT(!fragmentShaderSource.empty());
+	GLuint		fragmentShader	   = glCreateShader(GL_FRAGMENT_SHADER);
+	const char* fragmentSourceCStr = fragmentShaderSource.c_str();
+	GL_ASSERT(glShaderSource(fragmentShader, 1, &fragmentSourceCStr, nullptr));
+	GL_ASSERT(glCompileShader(fragmentShader));
+
+	GL_ASSERT(glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, (int*)&success));
+	if (!success)
+	{
+		char infoLog[512];
+		GL_ASSERT(glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog));
+		fprintf(stderr, "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s", infoLog);
+		ASSERT(false);
+	}
+
+	GLuint shaderProgram = glCreateProgram();
+	GL_ASSERT(glAttachShader(shaderProgram, vertexShader));
+	GL_ASSERT(glAttachShader(shaderProgram, fragmentShader));
+	GL_ASSERT(glLinkProgram(shaderProgram));
+
+	GL_ASSERT(glGetProgramiv(shaderProgram, GL_LINK_STATUS, (int*)&success));
+	if (!success)
+	{
+		char infoLog[512];
+		GL_ASSERT(glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog));
+		fprintf(stderr, "ERROR::SHADER::PROGRAM::LINKING_FAILED\n%s", infoLog);
+		ASSERT(false);
+	}
+
+	GL_ASSERT(glDeleteShader(vertexShader));
+	GL_ASSERT(glDeleteShader(fragmentShader));
+
 	while (!glfwWindowShouldClose(window))
 	{
 		EASY_BLOCK("Main Loop");
 		glClear(GL_COLOR_BUFFER_BIT);
+
+		GL_ASSERT(glUseProgram(shaderProgram));
+		GL_ASSERT(glDrawArrays(GL_TRIANGLES, 0, 3));
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
@@ -45,4 +102,20 @@ int main()
 	glfwTerminate();
 	profiler::dumpBlocksToFile(STRINGIFY(SOURCE_DIR) "/logs/log.prof");
 	return 0;
+}
+
+std::string readFile(const std::string& filepath)
+{
+	std::ifstream fileStream(filepath, std::ios::in);
+	ASSERT(fileStream.is_open());
+
+	std::string content;
+	std::string line;
+	while (std::getline(fileStream, line))
+	{
+		content += line + "\n";
+	}
+
+	fileStream.close();
+	return content;
 }

@@ -11,3 +11,12 @@
 
 #define _STRINGIFY(x) #x
 #define STRINGIFY(x)  _STRINGIFY(x)
+
+#define GL_ASSERT(call)                                                                                                \
+	do                                                                                                                 \
+	{                                                                                                                  \
+		while (glGetError() != GL_NO_ERROR);                                                                           \
+		call;                                                                                                          \
+		GLenum err = glGetError();                                                                                     \
+		ASSERT(err == GL_NO_ERROR);                                                                                    \
+	} while (0)

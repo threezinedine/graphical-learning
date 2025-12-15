@@ -46,3 +46,9 @@ target_compile_definitions(
     PRIVATE
     SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+target_compile_options(
+    ${PROJECT_NAME}
+    PRIVATE
+    -g
+)

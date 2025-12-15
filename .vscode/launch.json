@@ -1,0 +1,12 @@
+{
+	"configurations": [
+		{
+			"name": "Launch",
+			"type": "cppdbg",
+			"request": "launch",
+			"preLaunchTask": "Build",
+			"program": "${workspaceRoot}/build/GraphicalApp",
+			"cwd": "${workspaceRoot}/build"
+		}
+	]
+}
