@@ -20,13 +20,14 @@ struct Vertex
 {
 	vec2 position;
 	vec3 color;
+	vec2 texCoord;
 };
 
 // clang-format off
 const Vertex vertices[] = {
-	{{ 0.0f,  0.5f}, {1.0f, 0.0f, 0.0f}}, // Top vertex (Red)
-	{{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, // Bottom-left vertex (Green)
-	{{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},  // Bottom-right vertex (Blue)
+	{{ 0.0f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}}, // Top vertex (Red)
+	{{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.5f, 1.0f}}, // Bottom-left vertex (Green)
+	{{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},  // Bottom-right vertex (Blue)
 };
 // clang-format on
 
@@ -51,7 +52,7 @@ int main()
 	Shader shaders[2] = {std::move(vertexShader), std::move(fragmentShader)};
 
 	Pipeline	 pipeline(shaders, 2);
-	VertexBuffer buffer({VertexAttributeType::VEC2, VertexAttributeType::VEC3});
+	VertexBuffer buffer({VertexAttributeType::VEC2, VertexAttributeType::VEC3, VertexAttributeType::VEC2});
 
 	buffer.update(vertices, sizeof(vertices));
 
@@ -62,7 +63,9 @@ int main()
 
 		buffer.bind();
 		pipeline.bind();
+		texture.bind(0);
 		GL_ASSERT(glDrawArrays(GL_TRIANGLES, 0, 3));
+		texture.unbind();
 		pipeline.unbind();
 		buffer.unbind();
 
