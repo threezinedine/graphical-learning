@@ -16,7 +16,14 @@ def main():
 
     subparsers.add_parser("build", help="Build the project.")
     subparsers.add_parser("clean", help="Clean build artifacts.")
-    subparsers.add_parser("run", help="Run the project.")
+
+    runSubparser = subparsers.add_parser("run", help="Run the project.")
+    runSubparser.add_argument(
+        "--type",
+        choices=["opengl", "vulkan"],
+        default="opengl",
+        help="Type of graphical application to run.",
+    )
 
     args = parser.parse_args()
 
@@ -25,7 +32,7 @@ def main():
     elif args.command == "clean":
         run_command("rm -rf build")
     elif args.command == "run":
-        run_command("cmake --build build && ./build/GraphicalApp")
+        run_command(f"cmake --build build && ./build/GraphicalApp-{args.type}")
 
 
 if __name__ == "__main__":

@@ -11,32 +11,36 @@ endmacro()
 
 project(GraphicalApp LANGUAGES CXX)
 
-file(
-    GLOB_RECURSE 
-    SOURCE_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-)
-
-file(
-    GLOB_RECURSE 
-    HEADER_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
-)
-
-add_executable(
-    ${PROJECT_NAME} 
-    ${SOURCE_FILES} 
-    ${HEADER_FILES}
-)
-
 ntt_find_package(ntt-glfw)
 ntt_find_package(ntt-stb)
 ntt_find_package(ntt-profiler)
 ntt_find_package(ntt-glm)
 ntt_find_package(ntt-assimp)
 
+## OpenGL Application
+file(
+    GLOB_RECURSE 
+    OPENGL_SOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src-opengl/*.cpp"
+)
+
+file(
+    GLOB_RECURSE 
+    OPENGL_HEADER_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src-opengl/*.h"
+)
+
+set(OPENGL_PROJECT_NAME ${PROJECT_NAME}-opengl)
+
+add_executable(
+    ${OPENGL_PROJECT_NAME} 
+    ${OPENGL_SOURCE_FILES} 
+    ${OPENGL_HEADER_FILES}
+)
+
+
 target_link_libraries(
-    ${PROJECT_NAME}
+    ${OPENGL_PROJECT_NAME}
     PRIVATE
     ntt-glfw
     ntt-stb
@@ -46,13 +50,56 @@ target_link_libraries(
 )
 
 target_compile_definitions(
-    ${PROJECT_NAME}
+    ${OPENGL_PROJECT_NAME}
     PRIVATE
     SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_compile_options(
-    ${PROJECT_NAME}
+    ${OPENGL_PROJECT_NAME}
+    PRIVATE
+    -g
+)
+
+## Vulkan Application
+file(
+    GLOB_RECURSE 
+    VULKAN_SOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src-vulkan/*.cpp"
+)
+
+file(
+    GLOB_RECURSE 
+    VULKAN_HEADER_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src-vulkan/*.h"
+)
+
+set(VULKAN_PROJECT_NAME ${PROJECT_NAME}-vulkan)
+
+add_executable(
+    ${VULKAN_PROJECT_NAME}
+    ${VULKAN_SOURCE_FILES}
+    ${VULKAN_HEADER_FILES}
+)
+
+target_link_libraries(
+    ${VULKAN_PROJECT_NAME}
+    PRIVATE
+    ntt-glfw
+    ntt-stb
+    ntt-profiler
+    ntt-glm
+    ntt-assimp
+)
+
+target_compile_definitions(
+    ${VULKAN_PROJECT_NAME}
+    PRIVATE
+    SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_compile_options(
+    ${VULKAN_PROJECT_NAME}
     PRIVATE
     -g
 )
