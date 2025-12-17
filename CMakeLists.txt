@@ -16,6 +16,7 @@ ntt_find_package(ntt-stb)
 ntt_find_package(ntt-profiler)
 ntt_find_package(ntt-glm)
 ntt_find_package(ntt-assimp)
+ntt_find_package(ntt-vulkan)
 
 ## OpenGL Application
 file(
@@ -90,16 +91,23 @@ target_link_libraries(
     ntt-profiler
     ntt-glm
     ntt-assimp
+    ntt-vulkan
 )
 
 target_compile_definitions(
     ${VULKAN_PROJECT_NAME}
     PRIVATE
     SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+    BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_compile_options(
     ${VULKAN_PROJECT_NAME}
     PRIVATE
     -g
+)
+
+ntt_vulkan_compile(
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/vulkan/simple.vert"
+    "${CMAKE_CURRENT_BINARY_DIR}/shaders"
 )

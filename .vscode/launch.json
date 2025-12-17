@@ -1,11 +1,19 @@
 {
 	"configurations": [
 		{
-			"name": "Launch",
+			"name": "OpenGL",
 			"type": "cppdbg",
 			"request": "launch",
 			"preLaunchTask": "Build",
-			"program": "${workspaceRoot}/build/GraphicalApp",
+			"program": "${workspaceRoot}/build/GraphicalApp-opengl",
+			"cwd": "${workspaceRoot}/build"
+		},
+		{
+			"name": "Vulkan",
+			"type": "cppdbg",
+			"request": "launch",
+			"preLaunchTask": "Build",
+			"program": "${workspaceRoot}/build/GraphicalApp-vulkan",
 			"cwd": "${workspaceRoot}/build"
 		}
 	]
