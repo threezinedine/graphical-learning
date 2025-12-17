@@ -33,6 +33,7 @@ ntt_find_package(ntt-glfw)
 ntt_find_package(ntt-stb)
 ntt_find_package(ntt-profiler)
 ntt_find_package(ntt-glm)
+ntt_find_package(ntt-assimp)
 
 target_link_libraries(
     ${PROJECT_NAME}
@@ -41,6 +42,7 @@ target_link_libraries(
     ntt-stb
     ntt-profiler
     ntt-glm
+    ntt-assimp
 )
 
 target_compile_definitions(

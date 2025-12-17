@@ -1,15 +1,38 @@
-#version 460
+//
+#version 460 core
 
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec3 color;
-layout(location = 2) in vec2 texCoord;
+layout(std140, binding = 0) uniform PerFrameData
+{
+	uniform mat4 MVP;
+};
 
-layout(location = 0) out vec3 vColor;
-layout(location = 1) out vec2 vTexCoord;
+struct Vertex
+{
+	float p[3];
+	float tc[2];
+};
+
+layout(std430, binding = 1) restrict readonly buffer Vertices
+{
+	Vertex in_Vertices[];
+};
+
+vec3 getPosition(int i)
+{
+	return vec3(in_Vertices[i].p[0], in_Vertices[i].p[1], in_Vertices[i].p[2]);
+}
+
+vec2 getTexCoord(int i)
+{
+	return vec2(in_Vertices[i].tc[0], in_Vertices[i].tc[1]);
+}
+
+layout (location=0) out vec2 uv;
 
 void main()
 {
-    gl_Position = vec4(position, 0.0, 1.0);
-    vColor = color;
-    vTexCoord = texCoord;
+	vec3 pos = getPosition(gl_VertexID);
+	gl_Position = MVP * vec4(pos, 1.0);
+
+	uv = getTexCoord(gl_VertexID);
 }
