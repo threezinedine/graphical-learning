@@ -1,5 +1,7 @@
 #include "common.h"
+#include <cstring>
 #include <functional>
+#include <set>
 #include <stack>
 
 using ReleaseFunc = std::function<void(void*)>;
@@ -18,6 +20,12 @@ const std::vector<const char*> requiredExtensions = {
 	VK_KHR_SURFACE_EXTENSION_NAME,
 };
 
+const std::vector<const char*> requiredDeviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+};
+
+const std::vector<const char*> requiredDeviceLayers = {};
+
 struct InstanceContext
 {
 	VkInstance					  instance;
@@ -28,7 +36,7 @@ struct InstanceContext
 struct QueueFamily
 {
 	bool existed;
-	i32	 index;
+	u32	 index;
 };
 
 struct QueueFamilies
@@ -158,6 +166,7 @@ static void createSurface(GLFWwindow* pWindow)
 
 static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalDeviceFunc evaluateFunc);
 static void findQueueFamilies(DeviceContext& deviceContext);
+static void createDevice(DeviceContext& deviceContext);
 static void createSwapchain(DeviceContext& deviceContext);
 
 static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFunc evaluateFunc)
@@ -167,6 +176,7 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 
 	choosePhysicalDevice(deviceContext, evaluateFunc);
 	findQueueFamilies(deviceContext);
+	createDevice(deviceContext);
 	createSwapchain(deviceContext);
 
 	return deviceContext;
@@ -175,6 +185,59 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 static void destroyDevice(DeviceContext& deviceContext)
 {
 	CLEANUP(deviceContext.releaseStack);
+}
+
+static void createDevice(DeviceContext& deviceContext)
+{
+	ASSERT(deviceContext.physicalDevice != VK_NULL_HANDLE);
+
+	std::set<u32> uniqueQueueFamilies;
+	uniqueQueueFamilies.insert(deviceContext.queueFamilies.graphics.index);
+	uniqueQueueFamilies.insert(deviceContext.queueFamilies.present.index);
+	if (deviceContext.queueFamilies.compute.existed)
+	{
+		uniqueQueueFamilies.insert(deviceContext.queueFamilies.compute.index);
+	}
+	if (deviceContext.queueFamilies.transfer.existed)
+	{
+		uniqueQueueFamilies.insert(deviceContext.queueFamilies.transfer.index);
+	}
+
+	u32									 uniqueFamiliesCount = u32(uniqueQueueFamilies.size());
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(uniqueFamiliesCount);
+	memset(queueCreateInfos.data(), 0, sizeof(VkDeviceQueueCreateInfo) * uniqueFamiliesCount);
+
+	f32 graphicsPriority = 1.0f;
+	f32 computePriority	 = 0.5f;
+
+	for (u32 uniqueFamilyIndex = 0u; uniqueFamilyIndex < uniqueFamiliesCount; ++uniqueFamilyIndex)
+	{
+		u32	 index		   = *(std::next(uniqueQueueFamilies.begin(), uniqueFamilyIndex));
+		f32* queuePriority = index == deviceContext.queueFamilies.graphics.index ? &graphicsPriority : &computePriority;
+
+		VkDeviceQueueCreateInfo& queueCreateInfo = queueCreateInfos[uniqueFamilyIndex];
+		queueCreateInfo.sType					 = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex		 = index;
+		queueCreateInfo.queueCount				 = 1;
+		queueCreateInfo.pQueuePriorities		 = queuePriority;
+	}
+
+	VkDeviceCreateInfo deviceInfo	   = {};
+	deviceInfo.sType				   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	deviceInfo.queueCreateInfoCount	   = uniqueFamiliesCount;
+	deviceInfo.pQueueCreateInfos	   = queueCreateInfos.data();
+	deviceInfo.enabledExtensionCount   = u32(requiredDeviceExtensions.size());
+	deviceInfo.ppEnabledExtensionNames = requiredDeviceExtensions.data();
+	deviceInfo.enabledLayerCount	   = u32(requiredDeviceLayers.size());
+	deviceInfo.ppEnabledLayerNames	   = requiredDeviceLayers.data();
+
+	VK_ASSERT(vkCreateDevice(deviceContext.physicalDevice, &deviceInfo, nullptr, &deviceContext.device));
+	deviceContext.releaseStack.push({&deviceContext.device, [](void* p) {
+										 VkDevice device = *(VkDevice*)p;
+										 vkDestroyDevice(device, nullptr);
+									 }});
+
+	printf("Logical device created.\n");
 }
 
 static void findQueueFamilies(DeviceContext& deviceContext)
