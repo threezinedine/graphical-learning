@@ -47,6 +47,13 @@ struct QueueFamilies
 	QueueFamily transfer;
 };
 
+struct FlightSyncObjects
+{
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
+	VkFence		inFlightFence;
+};
+
 struct DeviceContext
 {
 	GLFWwindow*		 pWindow;
@@ -61,6 +68,14 @@ struct DeviceContext
 	u32						 swapchainImagesCount;
 	std::vector<VkImage>	 swapchainImages;
 	std::vector<VkImageView> swapchainImageViews;
+
+	VkCommandPool graphicsCommandPool;
+	VkCommandPool presentCommandPool;
+
+	VkCommandBuffer graphicsBuffer;
+	VkCommandBuffer presentBuffer;
+
+	std::vector<FlightSyncObjects> flightSyncObjects;
 
 	std::stack<ReleaseNode> releaseStack;
 };
@@ -192,6 +207,9 @@ static void createSwapchain(DeviceContext&		  deviceContext,
 							ChooseExtentFunc	  chooseExtent		= chooseSwapchainExtent);
 static void aquireSwapchainImages(DeviceContext& deviceContext);
 static void createSwapchainImagesViews(DeviceContext& deviceContext);
+static void createCommandPools(DeviceContext& deviceContext);
+static void createCommandBuffers(DeviceContext& deviceContext);
+static void createFlightSyncObjects(DeviceContext& deviceContext);
 
 static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFunc evaluateFunc)
 {
@@ -203,15 +221,122 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 	createDevice(deviceContext);
 	createSwapchain(deviceContext);
 	aquireSwapchainImages(deviceContext);
+	createSwapchainImagesViews(deviceContext);
+	createCommandPools(deviceContext);
+	createCommandBuffers(deviceContext);
+	createFlightSyncObjects(deviceContext);
 
 	return deviceContext;
 }
 
-struct ImageViewDeleterData
+static void createSemaphore(VkDevice device, VkSemaphore* pSemaphore);
+static void createFence(VkDevice device, VkFence* pFence);
+static void createFlightSyncObjects(DeviceContext& deviceContext)
 {
-	DeviceContext* deviceContext;
-	VkImageView	   imageView;
-};
+	deviceContext.flightSyncObjects.resize(deviceContext.swapchainImagesCount);
+	memset(deviceContext.flightSyncObjects.data(), 0, sizeof(FlightSyncObjects) * deviceContext.swapchainImagesCount);
+
+	for (u32 flightIndex = 0u; flightIndex < deviceContext.swapchainImagesCount; ++flightIndex)
+	{
+		FlightSyncObjects& syncObjects = deviceContext.flightSyncObjects[flightIndex];
+
+		createSemaphore(deviceContext.device, &syncObjects.imageAvailableSemaphore);
+		createSemaphore(deviceContext.device, &syncObjects.renderFinishedSemaphore);
+		createFence(deviceContext.device, &syncObjects.inFlightFence);
+	}
+
+	deviceContext.releaseStack.push(
+		{&deviceContext, [](void* p) {
+			 DeviceContext& deviceContext = *(DeviceContext*)p;
+			 for (FlightSyncObjects& syncObjects : deviceContext.flightSyncObjects)
+			 {
+				 vkDestroySemaphore(deviceContext.device, syncObjects.imageAvailableSemaphore, nullptr);
+				 vkDestroySemaphore(deviceContext.device, syncObjects.renderFinishedSemaphore, nullptr);
+				 vkDestroyFence(deviceContext.device, syncObjects.inFlightFence, nullptr);
+			 }
+		 }});
+}
+
+static void createSemaphore(VkDevice device, VkSemaphore* pSemaphore)
+{
+	VkSemaphoreCreateInfo semaphoreInfo = {};
+	semaphoreInfo.sType					= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VK_ASSERT(vkCreateSemaphore(device, &semaphoreInfo, nullptr, pSemaphore));
+}
+
+static void createFence(VkDevice device, VkFence* pFence)
+{
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType				= VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags				= VK_FENCE_CREATE_SIGNALED_BIT;
+	VK_ASSERT(vkCreateFence(device, &fenceInfo, nullptr, pFence));
+}
+
+static void createCommandBuffers(DeviceContext& deviceContext)
+{
+	VkCommandBufferAllocateInfo graphicsAllocInfo = {};
+	graphicsAllocInfo.sType						  = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	graphicsAllocInfo.commandPool				  = deviceContext.graphicsCommandPool;
+	graphicsAllocInfo.level						  = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	graphicsAllocInfo.commandBufferCount		  = 1;
+	VK_ASSERT(vkAllocateCommandBuffers(deviceContext.device, &graphicsAllocInfo, &deviceContext.graphicsBuffer));
+	deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+										 DeviceContext& deviceContext = *(DeviceContext*)p;
+										 vkFreeCommandBuffers(deviceContext.device,
+															  deviceContext.graphicsCommandPool,
+															  1,
+															  &deviceContext.graphicsBuffer);
+									 }});
+
+	VkCommandBufferAllocateInfo presentAllocInfo = {};
+	presentAllocInfo.sType						 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	presentAllocInfo.commandPool				 = deviceContext.presentCommandPool;
+	presentAllocInfo.level						 = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	presentAllocInfo.commandBufferCount			 = 1;
+	VK_ASSERT(vkAllocateCommandBuffers(deviceContext.device, &presentAllocInfo, &deviceContext.presentBuffer));
+
+	deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+										 DeviceContext& deviceContext = *(DeviceContext*)p;
+										 vkFreeCommandBuffers(deviceContext.device,
+															  deviceContext.presentCommandPool,
+															  1,
+															  &deviceContext.presentBuffer);
+									 }});
+}
+
+static void createCommandPools(DeviceContext& deviceContext)
+{
+	VkCommandPoolCreateInfo graphicsPoolInfo = {};
+	graphicsPoolInfo.sType					 = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	graphicsPoolInfo.queueFamilyIndex		 = deviceContext.queueFamilies.graphics.index;
+	graphicsPoolInfo.flags					 = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	VK_ASSERT(
+		vkCreateCommandPool(deviceContext.device, &graphicsPoolInfo, nullptr, &deviceContext.graphicsCommandPool));
+	deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+										 DeviceContext& deviceContext = *(DeviceContext*)p;
+										 vkDestroyCommandPool(
+											 deviceContext.device, deviceContext.graphicsCommandPool, nullptr);
+									 }});
+
+	if (deviceContext.queueFamilies.present.index != deviceContext.queueFamilies.graphics.index)
+	{
+		VkCommandPoolCreateInfo presentPoolInfo = {};
+		presentPoolInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		presentPoolInfo.queueFamilyIndex		= deviceContext.queueFamilies.present.index;
+		presentPoolInfo.flags					= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		VK_ASSERT(
+			vkCreateCommandPool(deviceContext.device, &presentPoolInfo, nullptr, &deviceContext.presentCommandPool));
+		deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+											 DeviceContext& deviceContext = *(DeviceContext*)p;
+											 vkDestroyCommandPool(
+												 deviceContext.device, deviceContext.presentCommandPool, nullptr);
+										 }});
+	}
+	else
+	{
+		deviceContext.presentCommandPool = deviceContext.graphicsCommandPool;
+	}
+}
 
 static void createSwapchainImagesViews(DeviceContext& deviceContext)
 {
@@ -255,8 +380,10 @@ static void aquireSwapchainImages(DeviceContext& deviceContext)
 
 	for (u32 imageIndex = 0u; imageIndex < deviceContext.swapchainImagesCount; ++imageIndex)
 	{
-		VK_ASSERT(vkGetSwapchainImagesKHR(
-			deviceContext.device, deviceContext.swapchain, &deviceContext.swapchainImagesCount, nullptr));
+		VK_ASSERT(vkGetSwapchainImagesKHR(deviceContext.device,
+										  deviceContext.swapchain,
+										  &deviceContext.swapchainImagesCount,
+										  deviceContext.swapchainImages.data()));
 	}
 }
 
