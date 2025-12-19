@@ -54,6 +54,12 @@ struct DeviceContext
 	VkDevice		 device;
 	QueueFamilies	 queueFamilies;
 
+	VkSwapchainKHR	 swapchain;
+	VkFormat		 swapchainImageFormat;
+	VkExtent2D		 swapchainExtent;
+	VkPresentModeKHR swapchainPresentMode;
+	u32				 swapchainImagesCount;
+
 	std::stack<ReleaseNode> releaseStack;
 };
 
@@ -65,7 +71,17 @@ static void getPhysicalDevices();
 static void createSurface(GLFWwindow* pWindow);
 
 using EvaluatePhysicalDeviceFunc = std::function<u32(VkPhysicalDevice)>;
-static u32 evaluatePhysicalDevice(VkPhysicalDevice physicalDevice);
+
+using ChooseFormatFunc		= std::function<VkFormat(const std::vector<VkFormat>&)>;
+using ChoosePresentModeFunc = std::function<VkPresentModeKHR(const std::vector<VkPresentModeKHR>&)>;
+using ChooseImageCountFunc	= std::function<u32(VkSurfaceCapabilitiesKHR)>;
+using ChooseExtentFunc		= std::function<VkExtent2D(const VkSurfaceCapabilitiesKHR&)>;
+
+static u32				evaluatePhysicalDevice(VkPhysicalDevice physicalDevice);
+static VkFormat			chooseSwapchainFormat(const std::vector<VkFormat>& availableFormats);
+static VkPresentModeKHR chooseSwapchainPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+static u32				chooseSwapchainImageCount(VkSurfaceCapabilitiesKHR surfaceCapabilities);
+static VkExtent2D		chooseSwapchainExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
 
 static DeviceContext createDevice(GLFWwindow*				 pWindow,
 								  EvaluatePhysicalDeviceFunc evaluateFunc = evaluatePhysicalDevice);
@@ -167,7 +183,11 @@ static void createSurface(GLFWwindow* pWindow)
 static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalDeviceFunc evaluateFunc);
 static void findQueueFamilies(DeviceContext& deviceContext);
 static void createDevice(DeviceContext& deviceContext);
-static void createSwapchain(DeviceContext& deviceContext);
+static void createSwapchain(DeviceContext&		  deviceContext,
+							ChooseFormatFunc	  chooseFormat		= chooseSwapchainFormat,
+							ChoosePresentModeFunc choosePresentMode = chooseSwapchainPresentMode,
+							ChooseImageCountFunc  chooseImageCount	= chooseSwapchainImageCount,
+							ChooseExtentFunc	  chooseExtent		= chooseSwapchainExtent);
 
 static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFunc evaluateFunc)
 {
@@ -343,8 +363,74 @@ static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalD
 	deviceContext.physicalDevice = instanceContext.physicalDevices[bestIndex];
 }
 
-static void createSwapchain(DeviceContext& deviceContext)
+static void createSwapchain(DeviceContext&		  deviceContext,
+							ChooseFormatFunc	  chooseFormat,
+							ChoosePresentModeFunc choosePresentMode,
+							ChooseImageCountFunc  chooseImageCount,
+							ChooseExtentFunc	  chooseExtent)
 {
+	{
+		u32 presentModeCount = 0;
+		VK_ASSERT(vkGetPhysicalDeviceSurfacePresentModesKHR(
+			deviceContext.physicalDevice, instanceContext.surface, &presentModeCount, nullptr));
+
+		std::vector<VkPresentModeKHR> availablePresentModes(presentModeCount);
+		VK_ASSERT(vkGetPhysicalDeviceSurfacePresentModesKHR(
+			deviceContext.physicalDevice, instanceContext.surface, &presentModeCount, availablePresentModes.data()));
+
+		deviceContext.swapchainPresentMode = choosePresentMode(availablePresentModes);
+	}
+
+	{
+		VkSurfaceCapabilitiesKHR surfaceCapabilities;
+		VK_ASSERT(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+			deviceContext.physicalDevice, instanceContext.surface, &surfaceCapabilities));
+
+		deviceContext.swapchainImagesCount = chooseImageCount(surfaceCapabilities);
+		deviceContext.swapchainExtent	   = chooseExtent(surfaceCapabilities);
+	}
+
+	{
+		u32 formatCount = 0;
+		VK_ASSERT(vkGetPhysicalDeviceSurfaceFormatsKHR(
+			deviceContext.physicalDevice, instanceContext.surface, &formatCount, nullptr));
+
+		std::vector<VkSurfaceFormatKHR> availableFormats(formatCount);
+		VK_ASSERT(vkGetPhysicalDeviceSurfaceFormatsKHR(
+			deviceContext.physicalDevice, instanceContext.surface, &formatCount, availableFormats.data()));
+
+		std::vector<VkFormat> formats(formatCount);
+		for (u32 i = 0; i < formatCount; ++i)
+		{
+			formats[i] = availableFormats[i].format;
+		}
+
+		deviceContext.swapchainImageFormat = chooseFormat(formats);
+	}
+
+	VkSwapchainCreateInfoKHR swapchainInfo = {};
+	swapchainInfo.sType					   = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapchainInfo.surface				   = instanceContext.surface;
+	swapchainInfo.minImageCount			   = deviceContext.swapchainImagesCount;
+	swapchainInfo.imageFormat			   = deviceContext.swapchainImageFormat;
+	swapchainInfo.imageColorSpace		   = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	swapchainInfo.imageExtent			   = deviceContext.swapchainExtent;
+	swapchainInfo.imageArrayLayers		   = 1;
+	swapchainInfo.imageSharingMode		   = VK_SHARING_MODE_EXCLUSIVE;
+	swapchainInfo.queueFamilyIndexCount	   = 0;
+	swapchainInfo.imageUsage			   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	swapchainInfo.preTransform			   = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	swapchainInfo.compositeAlpha		   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	swapchainInfo.clipped				   = VK_TRUE;
+	swapchainInfo.oldSwapchain			   = VK_NULL_HANDLE;
+
+	VK_ASSERT(vkCreateSwapchainKHR(deviceContext.device, &swapchainInfo, nullptr, &deviceContext.swapchain));
+	deviceContext.releaseStack.push({&deviceContext.swapchain, [](void* p) {
+										 VkSwapchainKHR swapchain = *(VkSwapchainKHR*)p;
+										 vkDestroySwapchainKHR(((DeviceContext*)p)->device, swapchain, nullptr);
+									 }});
+
+	printf("Swapchain created.\n");
 }
 
 static u32 evaluatePhysicalDevice(VkPhysicalDevice physicalDevice)
@@ -370,4 +456,55 @@ static u32 evaluatePhysicalDevice(VkPhysicalDevice physicalDevice)
 	score += deviceProperties.limits.maxImageDimension2D;
 
 	return score;
+}
+
+static VkFormat chooseSwapchainFormat(const std::vector<VkFormat>& availableFormats)
+{
+	for (const VkFormat& format : availableFormats)
+	{
+		if (format == VK_FORMAT_B8G8R8A8_SRGB)
+		{
+			return format;
+		}
+	}
+
+	return availableFormats[0]; // fallback
+}
+
+static VkPresentModeKHR chooseSwapchainPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+{
+	for (const VkPresentModeKHR& presentMode : availablePresentModes)
+	{
+		if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+		{
+			return presentMode;
+		}
+	}
+
+	return VK_PRESENT_MODE_FIFO_KHR; // guaranteed to be available
+}
+
+static u32 chooseSwapchainImageCount(VkSurfaceCapabilitiesKHR surfaceCapabilities)
+{
+	u32 imageCount = surfaceCapabilities.minImageCount + 1;
+
+	if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount)
+	{
+		imageCount = surfaceCapabilities.maxImageCount;
+	}
+
+	return imageCount;
+}
+
+static VkExtent2D chooseSwapchainExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities)
+{
+	ASSERT(surfaceCapabilities.currentExtent.width != UINT32_MAX);
+
+	if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
+	{
+		return surfaceCapabilities.currentExtent;
+	}
+
+	ASSERT(false); // For simplicity, we ignore the case where we have to choose the extent ourselves.
+	return VkExtent2D{800, 600};
 }
