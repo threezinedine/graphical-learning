@@ -25,11 +25,26 @@ struct InstanceContext
 	VkSurfaceKHR				  surface;
 };
 
+struct QueueFamily
+{
+	bool existed;
+	i32	 index;
+};
+
+struct QueueFamilies
+{
+	QueueFamily graphics;
+	QueueFamily present;
+	QueueFamily compute;
+	QueueFamily transfer;
+};
+
 struct DeviceContext
 {
 	GLFWwindow*		 pWindow;
 	VkPhysicalDevice physicalDevice;
 	VkDevice		 device;
+	QueueFamilies	 queueFamilies;
 
 	std::stack<ReleaseNode> releaseStack;
 };
@@ -142,6 +157,8 @@ static void createSurface(GLFWwindow* pWindow)
 }
 
 static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalDeviceFunc evaluateFunc);
+static void findQueueFamilies(DeviceContext& deviceContext);
+static void createSwapchain(DeviceContext& deviceContext);
 
 static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFunc evaluateFunc)
 {
@@ -149,6 +166,8 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 	deviceContext.pWindow		= pWindow;
 
 	choosePhysicalDevice(deviceContext, evaluateFunc);
+	findQueueFamilies(deviceContext);
+	createSwapchain(deviceContext);
 
 	return deviceContext;
 }
@@ -156,6 +175,86 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 static void destroyDevice(DeviceContext& deviceContext)
 {
 	CLEANUP(deviceContext.releaseStack);
+}
+
+static void findQueueFamilies(DeviceContext& deviceContext)
+{
+	ASSERT(deviceContext.physicalDevice != VK_NULL_HANDLE);
+
+	u32 queueFamiliesCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(deviceContext.physicalDevice, &queueFamiliesCount, nullptr);
+
+	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamiliesCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(deviceContext.physicalDevice, &queueFamiliesCount, queueFamilies.data());
+
+	VkSurfaceKHR surface = instanceContext.surface;
+	ASSERT(surface != VK_NULL_HANDLE);
+
+	bool foundGraphicsAndPresent = false;
+	bool foundCompute			 = false;
+	bool foundTransfer			 = false;
+
+	for (u32 familyIndex = 0u; familyIndex < queueFamiliesCount; ++familyIndex)
+	{
+		const VkQueueFamilyProperties& properties	   = queueFamilies[familyIndex];
+		VkBool32					   supportsPresent = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(deviceContext.physicalDevice, familyIndex, surface, &supportsPresent);
+
+		if (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT && !foundGraphicsAndPresent)
+		{
+			deviceContext.queueFamilies.graphics.existed = true;
+			deviceContext.queueFamilies.graphics.index	 = familyIndex;
+		}
+
+		if (supportsPresent && !foundGraphicsAndPresent)
+		{
+			deviceContext.queueFamilies.present.existed = true;
+			deviceContext.queueFamilies.present.index	= familyIndex;
+
+			if (deviceContext.queueFamilies.graphics.index == familyIndex)
+			{
+				foundGraphicsAndPresent = true;
+			}
+		}
+	}
+
+	for (u32 familyIndex = 0u; familyIndex < queueFamiliesCount; ++familyIndex)
+	{
+		const VkQueueFamilyProperties& properties = queueFamilies[familyIndex];
+
+		if (properties.queueFlags & VK_QUEUE_COMPUTE_BIT && !foundCompute)
+		{
+			deviceContext.queueFamilies.compute.existed = true;
+			deviceContext.queueFamilies.compute.index	= familyIndex;
+
+			if (deviceContext.queueFamilies.graphics.index != familyIndex)
+			{
+				foundCompute = true;
+			}
+		}
+	}
+
+	for (u32 familyIndex = 0u; familyIndex < queueFamiliesCount; ++familyIndex)
+	{
+		const VkQueueFamilyProperties& properties = queueFamilies[familyIndex];
+		if (properties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+		{
+			deviceContext.queueFamilies.transfer.existed = true;
+			deviceContext.queueFamilies.transfer.index	 = familyIndex;
+
+			if (deviceContext.queueFamilies.graphics.index != familyIndex &&
+				deviceContext.queueFamilies.compute.index != familyIndex)
+			{
+				foundTransfer = true;
+			}
+		}
+	}
+
+	printf("Selected Queue Families:\n");
+	printf(" Graphics: %d\n", deviceContext.queueFamilies.graphics.index);
+	printf(" Present:  %d\n", deviceContext.queueFamilies.present.index);
+	printf(" Compute:  %d\n", deviceContext.queueFamilies.compute.index);
+	printf(" Transfer: %d\n", deviceContext.queueFamilies.transfer.index);
 }
 
 static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalDeviceFunc evaluateFunc)
@@ -179,6 +278,10 @@ static void choosePhysicalDevice(DeviceContext& deviceContext, EvaluatePhysicalD
 
 	ASSERT(bestIndex >= 0);
 	deviceContext.physicalDevice = instanceContext.physicalDevices[bestIndex];
+}
+
+static void createSwapchain(DeviceContext& deviceContext)
+{
 }
 
 static u32 evaluatePhysicalDevice(VkPhysicalDevice physicalDevice)
