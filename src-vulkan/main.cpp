@@ -54,11 +54,13 @@ struct DeviceContext
 	VkDevice		 device;
 	QueueFamilies	 queueFamilies;
 
-	VkSwapchainKHR	 swapchain;
-	VkFormat		 swapchainImageFormat;
-	VkExtent2D		 swapchainExtent;
-	VkPresentModeKHR swapchainPresentMode;
-	u32				 swapchainImagesCount;
+	VkSwapchainKHR			 swapchain;
+	VkFormat				 swapchainImageFormat;
+	VkExtent2D				 swapchainExtent;
+	VkPresentModeKHR		 swapchainPresentMode;
+	u32						 swapchainImagesCount;
+	std::vector<VkImage>	 swapchainImages;
+	std::vector<VkImageView> swapchainImageViews;
 
 	std::stack<ReleaseNode> releaseStack;
 };
@@ -188,6 +190,8 @@ static void createSwapchain(DeviceContext&		  deviceContext,
 							ChoosePresentModeFunc choosePresentMode = chooseSwapchainPresentMode,
 							ChooseImageCountFunc  chooseImageCount	= chooseSwapchainImageCount,
 							ChooseExtentFunc	  chooseExtent		= chooseSwapchainExtent);
+static void aquireSwapchainImages(DeviceContext& deviceContext);
+static void createSwapchainImagesViews(DeviceContext& deviceContext);
 
 static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFunc evaluateFunc)
 {
@@ -198,8 +202,62 @@ static DeviceContext createDevice(GLFWwindow* pWindow, EvaluatePhysicalDeviceFun
 	findQueueFamilies(deviceContext);
 	createDevice(deviceContext);
 	createSwapchain(deviceContext);
+	aquireSwapchainImages(deviceContext);
 
 	return deviceContext;
+}
+
+struct ImageViewDeleterData
+{
+	DeviceContext* deviceContext;
+	VkImageView	   imageView;
+};
+
+static void createSwapchainImagesViews(DeviceContext& deviceContext)
+{
+	deviceContext.swapchainImageViews.resize(deviceContext.swapchainImagesCount);
+
+	for (u32 imageIndex = 0u; imageIndex < deviceContext.swapchainImagesCount; ++imageIndex)
+	{
+		VkImage&	 swapchainImage		= deviceContext.swapchainImages[imageIndex];
+		VkImageView& swapchainImageView = deviceContext.swapchainImageViews[imageIndex];
+
+		VkImageViewCreateInfo imageViewInfo			  = {};
+		imageViewInfo.sType							  = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewInfo.image							  = swapchainImage;
+		imageViewInfo.viewType						  = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewInfo.format						  = deviceContext.swapchainImageFormat;
+		imageViewInfo.components.r					  = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewInfo.components.g					  = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewInfo.components.b					  = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewInfo.components.a					  = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewInfo.subresourceRange.aspectMask	  = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageViewInfo.subresourceRange.baseMipLevel	  = 0;
+		imageViewInfo.subresourceRange.levelCount	  = 1;
+		imageViewInfo.subresourceRange.baseArrayLayer = 0;
+		imageViewInfo.subresourceRange.layerCount	  = 1;
+
+		VK_ASSERT(vkCreateImageView(deviceContext.device, &imageViewInfo, nullptr, &swapchainImageView));
+	}
+
+	deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+										 DeviceContext& deviceContext = *(DeviceContext*)p;
+										 for (VkImageView imageView : deviceContext.swapchainImageViews)
+										 {
+											 vkDestroyImageView(deviceContext.device, imageView, nullptr);
+										 }
+									 }});
+}
+
+static void aquireSwapchainImages(DeviceContext& deviceContext)
+{
+	deviceContext.swapchainImages.resize(deviceContext.swapchainImagesCount);
+
+	for (u32 imageIndex = 0u; imageIndex < deviceContext.swapchainImagesCount; ++imageIndex)
+	{
+		VK_ASSERT(vkGetSwapchainImagesKHR(
+			deviceContext.device, deviceContext.swapchain, &deviceContext.swapchainImagesCount, nullptr));
+	}
 }
 
 static void destroyDevice(DeviceContext& deviceContext)
@@ -425,9 +483,9 @@ static void createSwapchain(DeviceContext&		  deviceContext,
 	swapchainInfo.oldSwapchain			   = VK_NULL_HANDLE;
 
 	VK_ASSERT(vkCreateSwapchainKHR(deviceContext.device, &swapchainInfo, nullptr, &deviceContext.swapchain));
-	deviceContext.releaseStack.push({&deviceContext.swapchain, [](void* p) {
-										 VkSwapchainKHR swapchain = *(VkSwapchainKHR*)p;
-										 vkDestroySwapchainKHR(((DeviceContext*)p)->device, swapchain, nullptr);
+	deviceContext.releaseStack.push({&deviceContext, [](void* p) {
+										 DeviceContext& deviceContext = *(DeviceContext*)p;
+										 vkDestroySwapchainKHR(deviceContext.device, deviceContext.swapchain, nullptr);
 									 }});
 
 	printf("Swapchain created.\n");
